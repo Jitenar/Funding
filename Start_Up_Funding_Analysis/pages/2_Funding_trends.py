@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+from utils.data_loader import load_data
+from utils.preprocessing import preprocess_data
+
 # Page Configuration
 st.set_page_config(
     page_title="Funding Trends",
@@ -11,27 +14,24 @@ st.set_page_config(
 
 st.title("📈 Funding Trends Analysis")
 
-# Load Data
-@st.cache_data
-def load_data():
-    return pd.read_csv("data/startup_funding.csv")
-
 try:
+    # Load and preprocess data
     df = load_data()
+    df = preprocess_data(df)
 
-    # Convert date column
-    df["Funding_Date"] = pd.to_datetime(
-        df["Funding_Date"],
-        errors="coerce"
-    )
+    if df.empty:
+        st.warning("No data available.")
+        st.stop()
 
     # Remove invalid dates
     df = df.dropna(subset=["Funding_Date"])
 
-    # Create Year and Month columns
-    df["Year"] = df["Funding_Date"].dt.year
-    df["Month"] = df["Funding_Date"].dt.strftime("%b")
+    # Month abbreviation for chart
+    df["Month_Short"] = df["Funding_Date"].dt.strftime("%b")
 
+    # ==========================
+    # Funding Records Per Year
+    # ==========================
     st.header("Funding Records Over Time")
 
     yearly_deals = (
@@ -40,7 +40,7 @@ try:
         .reset_index(name="Number of Deals")
     )
 
-    fig = px.line(
+    fig1 = px.line(
         yearly_deals,
         x="Year",
         y="Number of Deals",
@@ -48,11 +48,13 @@ try:
         title="Number of Funding Deals Per Year"
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig1, use_container_width=True)
 
     st.divider()
 
-    # Funding Amount Trend
+    # ==========================
+    # Total Funding Per Year
+    # ==========================
     st.header("Total Funding Amount by Year")
 
     yearly_funding = (
@@ -72,11 +74,13 @@ try:
 
     st.divider()
 
-    # Monthly Analysis
+    # ==========================
+    # Monthly Funding Activity
+    # ==========================
     st.header("Monthly Funding Activity")
 
     monthly_deals = (
-        df.groupby("Month")
+        df.groupby("Month_Short")
         .size()
         .reset_index(name="Deals")
     )
@@ -87,17 +91,17 @@ try:
         "Sep", "Oct", "Nov", "Dec"
     ]
 
-    monthly_deals["Month"] = pd.Categorical(
-        monthly_deals["Month"],
+    monthly_deals["Month_Short"] = pd.Categorical(
+        monthly_deals["Month_Short"],
         categories=month_order,
         ordered=True
     )
 
-    monthly_deals = monthly_deals.sort_values("Month")
+    monthly_deals = monthly_deals.sort_values("Month_Short")
 
     fig3 = px.bar(
         monthly_deals,
-        x="Month",
+        x="Month_Short",
         y="Deals",
         title="Monthly Funding Deals"
     )
@@ -106,20 +110,17 @@ try:
 
     st.divider()
 
-    # Funding Trend Table
+    # ==========================
+    # Funding Summary Table
+    # ==========================
     st.header("Funding Summary")
 
     st.dataframe(
         yearly_funding.sort_values(
-            "Amount_USD",
+            by="Amount_USD",
             ascending=False
         ),
         use_container_width=True
-    )
-
-except FileNotFoundError:
-    st.error(
-        "Dataset not found. Please place startup_funding.csv inside the data folder."
     )
 
 except Exception as e:
